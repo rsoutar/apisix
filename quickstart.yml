@@ -1,0 +1,186 @@
+version: "3.7"
+services:
+  ### KRATOS ###
+  kratos-migrate:
+    image: oryd/kratos:v1.1.0
+    environment:
+      - DSN=sqlite:///var/lib/sqlite/db.sqlite?_fk=true&mode=rwc
+    volumes:
+      - type: volume
+        source: kratos-sqlite
+        target: /var/lib/sqlite
+        read_only: false
+      - type: bind
+        source: ./config
+        target: /etc/config/kratos
+    command: -c /etc/config/kratos/kratos.yml migrate sql -e --yes
+    restart: on-failure
+    networks:
+      - intranet
+  kratos-selfservice-ui-node:
+    image: oryd/kratos-selfservice-ui-node:v1.1.0
+    ports:
+      - "4455:4455"
+    environment:
+      - PORT=4455
+      - HYDRA_ADMIN_URL=http://hydra:4445
+      - KRATOS_PUBLIC_URL=http://kratos:4433
+      - KRATOS_BROWSER_URL=http://127.0.0.1:4433
+      - COOKIE_SECRET=changeme
+      - CSRF_COOKIE_NAME=cookie_name
+      - CSRF_COOKIE_SECRET=changeme
+      - DANGEROUSLY_DISABLE_SECURE_CSRF_COOKIES=true
+    networks:
+      - intranet
+    restart: on-failure
+  kratos:
+    depends_on:
+      - kratos-migrate
+    image: oryd/kratos:v1.1.0
+    ports:
+      - "4433:4433" # public
+      - "4434:4434" # admin
+    restart: unless-stopped
+    environment:
+      - DSN=sqlite:///var/lib/sqlite/db.sqlite?_fk=true
+      - LOG_LEVEL=trace
+    command: serve -c /etc/config/kratos/kratos.yml --dev --watch-courier
+    volumes:
+      - type: volume
+        source: kratos-sqlite
+        target: /var/lib/sqlite
+        read_only: false
+      - type: bind
+        source: ./config
+        target: /etc/config/kratos
+    networks:
+      - intranet
+
+  ### HYDRA ###
+
+  hydra:
+    image: oryd/hydra:v2.2.0
+    ports:
+      - "4444:4444" # Public port
+      - "4445:4445" # Admin port
+      - "5555:5555" # Port for hydra token user
+    command: serve -c /etc/config/hydra/hydra.yml all --dev
+    volumes:
+      - type: volume
+        source: hydra-sqlite
+        target: /var/lib/sqlite
+        read_only: false
+      - type: bind
+        source: ./config
+        target: /etc/config/hydra
+    environment:
+      - DSN=sqlite:///var/lib/sqlite/db.sqlite?_fk=true
+    restart: unless-stopped
+    depends_on:
+      - hydra-migrate
+    networks:
+      - intranet
+  hydra-migrate:
+    image: oryd/hydra:v2.2.0
+    environment:
+      - DSN=sqlite:///var/lib/sqlite/db.sqlite?_fk=true
+    command: migrate -c /etc/config/hydra/hydra.yml sql -e --yes
+    volumes:
+      - type: volume
+        source: hydra-sqlite
+        target: /var/lib/sqlite
+        read_only: false
+      - type: bind
+        source: ./config
+        target: /etc/config/hydra
+    restart: on-failure
+    networks:
+      - intranet
+  # apisix:
+  #   image: apache/apisix:3.2.0-debian
+  #   restart: always
+  #   volumes:
+  #     - ./config/apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+  #   depends_on:
+  #     - etcd
+  #   ports:
+  #     - '9180:9180/tcp'
+  #     - '9080:9080/tcp'
+  #     - '9091:9091/tcp'
+  #     - '9443:9443/tcp'
+  #   networks:
+  #     - intranet
+  apisix:
+    image: apache/apisix:${APISIX_IMAGE_TAG:-3.9.0-debian}
+    restart: always
+    volumes:
+      - ./config/apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+    depends_on:
+      - etcd
+    ##network_mode: host
+    ports:
+      - "9180:9180/tcp"
+      - "9080:9080/tcp"
+      - "9091:9091/tcp"
+      - "9443:9443/tcp"
+      - "9092:9092/tcp"
+    networks:
+      intranet:
+
+  etcd:
+    image: bitnami/etcd:3.5.11
+    restart: always
+    volumes:
+      - etcd_data:/bitnami/etcd
+    environment:
+      ETCD_ENABLE_V2: "true"
+      ALLOW_NONE_AUTHENTICATION: "yes"
+      ETCD_ADVERTISE_CLIENT_URLS: "http://etcd:2379"
+      ETCD_LISTEN_CLIENT_URLS: "http://0.0.0.0:2379"
+    ports:
+      - "2379:2379/tcp"
+    networks:
+      intranet:
+  dashboard:
+    image: "apache/apisix-dashboard:3.0.1-alpine"
+    restart: always
+    volumes:
+      - ./config/apisix-dashboard/conf.yaml:/usr/local/apisix-dashboard/conf/conf.yaml:ro
+    depends_on:
+      - etcd
+    ports:
+      - "9000:9000/tcp"
+    networks:
+      - intranet
+  web1:
+      image: nginx:1.19.0-alpine
+      restart: always
+      volumes:
+        - ./upstream/web1.conf:/etc/nginx/nginx.conf
+      ports:
+        - "9081:80/tcp"
+      environment:
+        - NGINX_PORT=80
+      networks:
+        intranet:
+  web2:
+      image: nginx:1.19.0-alpine
+      restart: always
+      volumes:
+        - ./upstream/web2.conf:/etc/nginx/nginx.conf
+      ports:
+        - "9082:80/tcp"
+      environment:
+        - NGINX_PORT=80
+      networks:
+        intranet:
+
+
+volumes:
+  hydra-sqlite:
+  kratos-sqlite:
+  etcd_data:
+
+networks:
+  intranet:
+    driver: bridge
