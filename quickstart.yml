@@ -142,7 +142,7 @@ services:
     networks:
       intranet:
   dashboard:
-    image: "apache/apisix-dashboard:3.0.1-alpine"
+    image: "apache/apisix-dashboard:latest"
     restart: always
     volumes:
       - ./config/apisix-dashboard/conf.yaml:/usr/local/apisix-dashboard/conf/conf.yaml:ro
@@ -174,7 +174,27 @@ services:
         - NGINX_PORT=80
       networks:
         intranet:
+  prometheus:
+    image: prom/prometheus:v2.25.0
+    restart: always
+    volumes:
+      - ./config/prometheus_conf/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      intranet:
 
+  grafana:
+    image: grafana/grafana:7.3.7
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - "./config/grafana_conf/provisioning:/etc/grafana/provisioning"
+      - "./config/grafana_conf/dashboards:/var/lib/grafana/dashboards"
+      - "./config/grafana_conf/config/grafana.ini:/etc/grafana/grafana.ini"
+    networks:
+      intranet:
 
 volumes:
   hydra-sqlite:
