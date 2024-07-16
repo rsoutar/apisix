@@ -2,13 +2,13 @@ version: "3.8"
 services:
   kratos-migrate:
     environment:
-      - DSN=postgres://kratos:secret@postgresd:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
+      - DSN=postgres://kratos:supersecret@postgresd:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
     networks:
       - intranet
 
   kratos:
     environment:
-      - DSN=postgres://kratos:secret@postgresd:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
+      - DSN=postgres://kratos:supersecret@postgresd:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
     networks:
       - intranet
 
@@ -18,7 +18,7 @@ services:
       - "5432:5432"
     environment:
       - POSTGRES_USER=kratos
-      - POSTGRES_PASSWORD=secret
+      - POSTGRES_PASSWORD=supersecret
       - POSTGRES_DB=kratos
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -27,8 +27,7 @@ services:
 
 networks:
   intranet:
-    external:
-      name: apisix-hydra-kratos_intranet
+    driver: bridge
 
 volumes:
   postgres_data:
